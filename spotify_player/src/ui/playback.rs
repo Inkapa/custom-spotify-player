@@ -191,34 +191,53 @@ fn split_rect_for_progress_bar(rect: Rect) -> (Rect, Rect) {
 }
 
 #[cfg(feature = "image")]
+fn cover_img_rows(rect: Rect, configs: &config::Configs) -> u16 {
+    if configs.app_config.cover_img_width == 0 {
+        rect.height
+    } else {
+        std::cmp::min(configs.app_config.cover_img_width as u16, rect.height)
+    }
+}
+
+/// Determine the cover image box's width in columns.
+#[cfg(feature = "image")]
+fn cover_img_length(
+    rect: Rect,
+    configs: &config::Configs,
+    picker: &ratatui_image::picker::Picker,
+) -> u16 {
+    match configs.app_config.cover_img_length {
+        // When `cover_img_length` is `0` (the default), derive it from the terminal's cell aspect ratio
+        0 => {
+            let font_size = picker.font_size();
+            let rows = cover_img_rows(rect, configs);
+            if font_size.width > 0 {
+                rows * font_size.height / font_size.width
+            } else {
+                rows * 2
+            }
+        }
+        length => length as u16,
+    }
+}
+
+#[cfg(feature = "image")]
 fn split_rect_for_cover_img(rect: Rect, picker: &ratatui_image::picker::Picker) -> (Rect, Rect) {
     let configs = config::get_config();
+    let rows = cover_img_rows(rect, configs);
+    let cols = cover_img_length(rect, configs, picker);
     let hor_chunks = Layout::horizontal([
-        Constraint::Length(cover_img_length(configs, picker)),
+        Constraint::Length(cols),
         Constraint::Fill(0), // metadata_rect
     ])
     .spacing(1)
     .split(rect);
     let ver_chunks = Layout::vertical([
-        Constraint::Length(configs.app_config.cover_img_width as u16), // cover_img_rect
+        Constraint::Length(rows), // cover_img_rect
     ])
     .split(hor_chunks[0]);
 
     (ver_chunks[0], hor_chunks[1])
-}
-
-/// Determine the cover image box's width in columns.
-#[cfg(feature = "image")]
-fn cover_img_length(configs: &config::Configs, picker: &ratatui_image::picker::Picker) -> u16 {
-    match configs.app_config.cover_img_length {
-        // When `cover_img_length` is `0` (the default), derive it from the terminal's cell aspect ratio
-        0 => {
-            let font_size = picker.font_size();
-            let rows = configs.app_config.cover_img_width as u16;
-            rows * font_size.height / font_size.width
-        }
-        length => length as u16,
-    }
 }
 
 fn construct_playback_text(
@@ -449,7 +468,11 @@ fn split_rect_for_playback_window(state: &SharedState, rect: Rect) -> (Rect, Rec
     let playback_width = configs.app_config.layout.playback_window_height;
     // the playback window's width should not be smaller than the cover image's width + 1
     #[cfg(feature = "image")]
-    let playback_width = std::cmp::max(configs.app_config.cover_img_width + 1, playback_width);
+    let playback_width = if configs.app_config.cover_img_width > 0 {
+        std::cmp::max(configs.app_config.cover_img_width + 1, playback_width)
+    } else {
+        playback_width
+    };
 
     // When visualization is enabled *and* librespot is actively streaming,
     // reserve extra rows for the bar chart. When the local player is idle
