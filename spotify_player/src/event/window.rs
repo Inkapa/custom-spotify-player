@@ -458,15 +458,12 @@ pub fn handle_command_for_liked_songs_list_window(
             } else {
                 tracks[id].id.uri()
             };
-            let playback = Playback::URIs(
-                tracks.iter().map(|t| t.id.clone().into()).collect(),
-                None,
-            )
-            .uri_offset(uri, 50);
+            let playback =
+                Playback::URIs(tracks.iter().map(|t| t.id.clone().into()).collect(), None)
+                    .uri_offset(uri, 50);
 
             client_pub.send(ClientRequest::Player(PlayerRequest::StartPlayback(
-                playback,
-                None,
+                playback, None,
             )))?;
         }
         Command::ShowActionsOnSelectedItem => {

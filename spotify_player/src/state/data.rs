@@ -183,8 +183,7 @@ impl UserData {
     /// Construct a new user data based on file caches
     pub fn new_from_file_caches(cache_folder: &Path) -> Self {
         let saved_tracks: HashMap<String, Track> =
-            load_data_from_file_cache(FileCacheKey::SavedTracks, cache_folder)
-                .unwrap_or_default();
+            load_data_from_file_cache(FileCacheKey::SavedTracks, cache_folder).unwrap_or_default();
         let mut saved_tracks_vec: Vec<Track> =
             load_data_from_file_cache(FileCacheKey::SavedTracksVec, cache_folder)
                 .unwrap_or_default();

@@ -129,19 +129,43 @@ fn handle_key_event(
     if ui.resize_mode {
         match key {
             Key::None(KeyCode::Char('h')) | Key::None(KeyCode::Left) => {
-                let _ = handle_global_command(Command::DecreasePlaylistSplit, client_pub, state, &mut ui, None)?;
+                let _ = handle_global_command(
+                    Command::DecreasePlaylistSplit,
+                    client_pub,
+                    state,
+                    &mut ui,
+                    None,
+                )?;
                 return Ok(());
             }
             Key::None(KeyCode::Char('l')) | Key::None(KeyCode::Right) => {
-                let _ = handle_global_command(Command::IncreasePlaylistSplit, client_pub, state, &mut ui, None)?;
+                let _ = handle_global_command(
+                    Command::IncreasePlaylistSplit,
+                    client_pub,
+                    state,
+                    &mut ui,
+                    None,
+                )?;
                 return Ok(());
             }
             Key::None(KeyCode::Char('j')) | Key::None(KeyCode::Down) => {
-                let _ = handle_global_command(Command::IncreasePlaybackHeight, client_pub, state, &mut ui, None)?;
+                let _ = handle_global_command(
+                    Command::IncreasePlaybackHeight,
+                    client_pub,
+                    state,
+                    &mut ui,
+                    None,
+                )?;
                 return Ok(());
             }
             Key::None(KeyCode::Char('k')) | Key::None(KeyCode::Up) => {
-                let _ = handle_global_command(Command::DecreasePlaybackHeight, client_pub, state, &mut ui, None)?;
+                let _ = handle_global_command(
+                    Command::DecreasePlaybackHeight,
+                    client_pub,
+                    state,
+                    &mut ui,
+                    None,
+                )?;
                 return Ok(());
             }
             Key::None(KeyCode::Esc) | Key::None(KeyCode::Enter) | Key::Alt(KeyCode::Char('r')) => {
@@ -679,7 +703,8 @@ fn handle_global_command(
             );
         }
         Command::DecreasePlaybackHeight => {
-            ui.layout.playback_window_height = ui.layout.playback_window_height.saturating_sub(1).max(3);
+            ui.layout.playback_window_height =
+                ui.layout.playback_window_height.saturating_sub(1).max(3);
             let configs = config::get_config();
             let _ = crate::state::store_data_into_file_cache(
                 crate::state::FileCacheKey::LayoutSettings,

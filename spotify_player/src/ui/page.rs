@@ -485,13 +485,8 @@ pub fn render_library_page(
         frame,
         chunks[0],
     );
-    let liked_rect = construct_and_render_block(
-        "Liked Songs",
-        &ui.theme,
-        Borders::ALL,
-        frame,
-        chunks[1],
-    );
+    let liked_rect =
+        construct_and_render_block("Liked Songs", &ui.theme, Borders::ALL, frame, chunks[1]);
 
     // 3. Construct the page's widgets
     // Construct the playlist window

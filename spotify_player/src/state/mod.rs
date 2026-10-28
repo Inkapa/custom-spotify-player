@@ -50,10 +50,7 @@ impl State {
         }
 
         let cached_layout: Option<LayoutSettings> =
-            load_data_from_file_cache(
-                FileCacheKey::LayoutSettings,
-                &configs.cache_folder,
-            );
+            load_data_from_file_cache(FileCacheKey::LayoutSettings, &configs.cache_folder);
         if let Some(layout) = cached_layout {
             ui.layout = layout;
         } else {

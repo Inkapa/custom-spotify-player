@@ -41,7 +41,12 @@ pub fn get_episode_show_image_url(episode: &rspotify::model::FullEpisode) -> Opt
 pub fn get_cover_image_filename(item: &rspotify::model::PlayableItem) -> Option<String> {
     let filename = match item {
         rspotify::model::PlayableItem::Track(ref track) => {
-            let artist = track.album.artists.first().map(|a| a.name.as_str()).unwrap_or_default();
+            let artist = track
+                .album
+                .artists
+                .first()
+                .map(|a| a.name.as_str())
+                .unwrap_or_default();
             let album_id = track.album.id.as_ref().map_or("", |id| id.id());
             let prefix = &album_id[..6.min(album_id.len())];
             format!("{}-{}-cover-{}.jpg", track.album.name, artist, prefix)
@@ -50,7 +55,10 @@ pub fn get_cover_image_filename(item: &rspotify::model::PlayableItem) -> Option<
         rspotify::model::PlayableItem::Episode(ref episode) => {
             let show_id = episode.show.id.id();
             let prefix = &show_id[..6.min(show_id.len())];
-            format!("{}-{}-cover-{}.jpg", episode.show.name, episode.show.publisher, prefix)
+            format!(
+                "{}-{}-cover-{}.jpg",
+                episode.show.name, episode.show.publisher, prefix
+            )
         }
         rspotify::model::PlayableItem::Unknown(_) => return None,
     };

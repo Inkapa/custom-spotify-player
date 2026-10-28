@@ -74,7 +74,6 @@ fn handle_action_for_library_page(
             ui,
             client_pub,
         ),
-
     }
 }
 

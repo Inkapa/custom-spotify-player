@@ -30,8 +30,9 @@ impl PlayerState {
         let mut state = Self::default();
         if let Some(mut playback) = crate::state::data::load_data_from_file_cache::<
             rspotify::model::CurrentPlaybackContext,
-        >(crate::state::data::FileCacheKey::LastPlayback, cache_folder)
-        {
+        >(
+            crate::state::data::FileCacheKey::LastPlayback, cache_folder
+        ) {
             playback.is_playing = false;
             state.buffered_playback = Some(PlaybackMetadata::from_playback(&playback));
             state.playback = Some(playback);

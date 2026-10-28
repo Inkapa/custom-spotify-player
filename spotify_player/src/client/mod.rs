@@ -398,21 +398,37 @@ impl AppClient {
             PlayerRequest::Resume => {
                 if !playback.is_playing {
                     if let Err(err) = self.resume_playback(device_id, None).await {
-                        tracing::warn!("Failed to resume playback ({err:#}); restarting from track");
+                        tracing::warn!(
+                            "Failed to resume playback ({err:#}); restarting from track"
+                        );
                         if let Some(state) = state {
                             let (playable_id, progress) = {
                                 let player = state.player.read();
-                                let playable_id = player.playback.as_ref().and_then(|p| match p.item.as_ref() {
-                                    Some(rspotify::model::PlayableItem::Track(t)) => t.id.as_ref().map(|id| PlayableId::Track(id.clone_static())),
-                                    Some(rspotify::model::PlayableItem::Episode(e)) => Some(PlayableId::Episode(e.id.clone())),
-                                    _ => None,
-                                });
+                                let playable_id =
+                                    player
+                                        .playback
+                                        .as_ref()
+                                        .and_then(|p| match p.item.as_ref() {
+                                            Some(rspotify::model::PlayableItem::Track(t)) => {
+                                                t.id.as_ref()
+                                                    .map(|id| PlayableId::Track(id.clone_static()))
+                                            }
+                                            Some(rspotify::model::PlayableItem::Episode(e)) => {
+                                                Some(PlayableId::Episode(e.id.clone()))
+                                            }
+                                            _ => None,
+                                        });
                                 let progress = player.playback.as_ref().and_then(|p| p.progress);
                                 (playable_id, progress)
                             };
                             if let Some(playable_id) = playable_id {
                                 let offset = progress.map(rspotify::model::Offset::Position);
-                                let _ = self.start_playback(Playback::URIs(vec![playable_id], offset), device_id).await;
+                                let _ = self
+                                    .start_playback(
+                                        Playback::URIs(vec![playable_id], offset),
+                                        device_id,
+                                    )
+                                    .await;
                             }
                         }
                     }
@@ -431,21 +447,37 @@ impl AppClient {
                     self.pause_playback(device_id).await?;
                 } else {
                     if let Err(err) = self.resume_playback(device_id, None).await {
-                        tracing::warn!("Failed to resume playback ({err:#}); restarting from track");
+                        tracing::warn!(
+                            "Failed to resume playback ({err:#}); restarting from track"
+                        );
                         if let Some(state) = state {
                             let (playable_id, progress) = {
                                 let player = state.player.read();
-                                let playable_id = player.playback.as_ref().and_then(|p| match p.item.as_ref() {
-                                    Some(rspotify::model::PlayableItem::Track(t)) => t.id.as_ref().map(|id| PlayableId::Track(id.clone_static())),
-                                    Some(rspotify::model::PlayableItem::Episode(e)) => Some(PlayableId::Episode(e.id.clone())),
-                                    _ => None,
-                                });
+                                let playable_id =
+                                    player
+                                        .playback
+                                        .as_ref()
+                                        .and_then(|p| match p.item.as_ref() {
+                                            Some(rspotify::model::PlayableItem::Track(t)) => {
+                                                t.id.as_ref()
+                                                    .map(|id| PlayableId::Track(id.clone_static()))
+                                            }
+                                            Some(rspotify::model::PlayableItem::Episode(e)) => {
+                                                Some(PlayableId::Episode(e.id.clone()))
+                                            }
+                                            _ => None,
+                                        });
                                 let progress = player.playback.as_ref().and_then(|p| p.progress);
                                 (playable_id, progress)
                             };
                             if let Some(playable_id) = playable_id {
                                 let offset = progress.map(rspotify::model::Offset::Position);
-                                let _ = self.start_playback(Playback::URIs(vec![playable_id], offset), device_id).await;
+                                let _ = self
+                                    .start_playback(
+                                        Playback::URIs(vec![playable_id], offset),
+                                        device_id,
+                                    )
+                                    .await;
                             }
                         }
                     }
@@ -546,7 +578,9 @@ impl AppClient {
             }
             ClientRequest::Player(request) => {
                 let playback = state.player.read().buffered_playback.clone();
-                let playback = self.handle_player_request(Some(state), request, playback).await?;
+                let playback = self
+                    .handle_player_request(Some(state), request, playback)
+                    .await?;
                 state.player.write().buffered_playback = playback;
                 self.update_playback_non_blocking(state);
             }
@@ -1365,7 +1399,9 @@ impl AppClient {
                     // update the in-memory `user_data`
                     {
                         let mut data = state.data.write();
-                        data.user_data.saved_tracks.insert(track.id.uri(), track.clone());
+                        data.user_data
+                            .saved_tracks
+                            .insert(track.id.uri(), track.clone());
                         data.user_data.saved_tracks_vec.retain(|t| t.id != track.id);
                         data.user_data.saved_tracks_vec.insert(0, track);
                         let _ = store_data_into_file_cache(
@@ -1452,7 +1488,9 @@ impl AppClient {
                 self.library_remove([LibraryId::Track(id)]).await?;
                 let mut data = state.data.write();
                 data.user_data.saved_tracks.remove(&uri);
-                data.user_data.saved_tracks_vec.retain(|t| t.id.uri() != uri);
+                data.user_data
+                    .saved_tracks_vec
+                    .retain(|t| t.id.uri() != uri);
                 let _ = store_data_into_file_cache(
                     FileCacheKey::SavedTracksVec,
                     &config::get_config().cache_folder,
@@ -1749,7 +1787,9 @@ impl AppClient {
 
                     let curr_name = match curr_item {
                         Some(rspotify::model::PlayableItem::Track(track)) => track.name.clone(),
-                        Some(rspotify::model::PlayableItem::Episode(episode)) => episode.name.clone(),
+                        Some(rspotify::model::PlayableItem::Episode(episode)) => {
+                            episode.name.clone()
+                        }
                         Some(rspotify::model::PlayableItem::Unknown(_)) | None => String::new(),
                     };
 
