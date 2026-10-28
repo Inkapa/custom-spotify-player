@@ -1,8 +1,42 @@
-# spotify_player
+# custom-spotify-player
+
+A modified fork of [aome510/spotify-player](https://github.com/aome510/spotify-player) tailored for modern terminal workflows, multi-monitor and secondary displays (such as the ASUS ScreenPad or dedicated mini-screens), and resilient Spotify Web API usage.
+
+## Modifications in This Fork
+
+1. **Persistent Cover Art and Song Metadata**
+   - Cover art and playback state are cached on disk.
+   - When playback pauses or the Spotify Web API returns HTTP 204 (No Content) during idle periods, the player preserves the last known song and cover art instead of wiping the UI.
+   - On startup, the cached cover and track details appear immediately without waiting for play commands.
+
+2. **Interactive Live Layout Resizing**
+   - Press `Alt+r` to toggle resize mode (`Playback [RESIZE: h/j/k/l or arrows, Esc/Enter to exit]`):
+     - `j` / `Down`: Grow playback window and cover art height vertically.
+     - `k` / `Up`: Shrink playback window and cover art height vertically.
+     - `l` / `Right`: Expand the playlist column horizontally.
+     - `h` / `Left`: Shrink the playlist column and expand liked songs horizontally.
+     - `Enter` or `Esc`: Exit resize mode.
+   - Direct shortcuts outside resize mode: `Alt+Down` / `Alt+Up` and `Alt+Right` / `Alt+Left`.
+   - Layout adjustments persist in `~/.cache/spotify-player/LayoutSettings_cache.json` automatically, allowing laptop, desktop, and auxiliary monitors to keep independent sizing.
+
+3. **Redesigned Library Page (Playlists and Liked Songs)**
+   - Replaces the default Playlists and Albums split with **Playlists** on the left and **Liked Songs** on the right.
+   - Includes track index navigation, direct playback, context menus, and queue operations.
+
+4. **Hybrid Client ID and Automatic ncspot Fallback (Anti-429)**
+   - Avoids Spotify's aggressive Web API rate limits (HTTP 429).
+   - Set a personal developer `client_id` in `app.toml` to get a dedicated rate limit quota for personal library endpoints.
+   - Automatically falls back to `ncspot`'s shared client ID for external playlists or restricted endpoints that developer mode cannot query.
+   - Librespot streaming connects through official Spotify Access Point endpoints for reliable playback.
+
+5. **Built-in Image and Notification Defaults**
+   - Pre-configured with Kitty image protocol, sixel/halfblocks, desktop notifications, and Rodio audio backend by default across Linux, Windows, and macOS.
+   - GitHub Actions CI/CD pipeline builds precompiled releases for Windows (`x86_64-pc-windows-msvc`) and Linux (`x86_64-unknown-linux-gnu`).
 
 ## Table of Contents
 
 - [Introduction](#introduction)
+- [Modifications in This Fork](#modifications-in-this-fork)
 - [Examples](#examples)
 - [Installation](#installation)
 - [Authentication](#authentication)

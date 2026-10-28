@@ -4,6 +4,15 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag (e.g. v0.25.1-custom)"
+        required: false
+        default: "v0.25.1-custom"
+
+permissions:
+  contents: write
 
 jobs:
   publish:
@@ -64,8 +73,9 @@ jobs:
           esac;
 
       - name: Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag_name || github.ref_name }}
           files: target/${{ matrix.target }}/release/spotify_player-*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,5 +1,10 @@
 theme = "default"
 login_redirect_uri = "http://127.0.0.1:8989/login"
+# Optional: your own Spotify developer client ID (from https://developer.spotify.com/dashboard).
+# Using your own client ID gives you dedicated API rate limits to prevent HTTP 429 errors.
+# If omitted or when requesting endpoints not permitted by your app, it automatically
+# falls back to ncspot's client ID.
+# client_id = "your_spotify_developer_client_id"
 client_id = "d420a117a32841c2b3474932e49fb54b"
 ncspot_only_get_endpoints = ["me/playlists", "search", "playlists/"]
 client_port = 8080
