@@ -455,7 +455,6 @@ pub fn render_library_page(
     // 1. Get data
     let curr_context_uri = state.player.read().playing_context_id().map(|c| c.uri());
     let data = state.data.read();
-    let configs = config::get_config();
 
     let (focus_state, playlist_folder_id) = match ui.current_page() {
         PageState::Library { state } => (state.focus, state.playlist_folder_id),
@@ -463,20 +462,16 @@ pub fn render_library_page(
     };
 
     // 2. Construct the page's layout
-    // Split the library page into 3 windows:
+    // Split the library page into 2 windows:
     // - a playlists window
-    // - a saved albums window
-    // - a followed artists window
+    // - a liked songs window
 
+    let playlist_percent = ui.layout.playlist_percent.clamp(10, 90);
     let chunks = ui
         .orientation
         .layout([
-            Constraint::Percentage(configs.app_config.layout.library.playlist_percent),
-            Constraint::Percentage(configs.app_config.layout.library.album_percent),
-            Constraint::Percentage(
-                100 - (configs.app_config.layout.library.album_percent
-                    + configs.app_config.layout.library.playlist_percent),
-            ),
+            Constraint::Percentage(playlist_percent),
+            Constraint::Percentage(100 - playlist_percent),
         ])
         .split(rect);
 
@@ -490,18 +485,13 @@ pub fn render_library_page(
         frame,
         chunks[0],
     );
-    let album_rect = construct_and_render_block(
-        "Albums",
+    let liked_rect = construct_and_render_block(
+        "Liked Songs",
         &ui.theme,
-        match ui.orientation {
-            Orientation::Horizontal => Borders::TOP | Borders::LEFT | Borders::BOTTOM,
-            Orientation::Vertical => Borders::ALL,
-        },
+        Borders::ALL,
         frame,
         chunks[1],
     );
-    let artist_rect =
-        construct_and_render_block("Artists", &ui.theme, Borders::ALL, frame, chunks[2]);
 
     // 3. Construct the page's widgets
     // Construct the playlist window
@@ -516,9 +506,7 @@ pub fn render_library_page(
         })
         .collect::<Vec<_>>();
 
-    let is_playlist_active = is_active
-        && focus_state != LibraryFocusState::SavedAlbums
-        && focus_state != LibraryFocusState::FollowedArtists;
+    let is_playlist_active = is_active && focus_state == LibraryFocusState::Playlists;
     let playlist_selected = if is_playlist_active {
         ui.current_page_mut().selected()
     } else {
@@ -526,38 +514,36 @@ pub fn render_library_page(
     };
     let (playlist_list, n_playlists) =
         utils::construct_list_widget(&ui.theme, items, is_playlist_active, playlist_selected);
-    // Construct the saved album window
-    let is_album_active = is_active && focus_state == LibraryFocusState::SavedAlbums;
-    let album_selected = if is_album_active {
+
+    // Construct the liked songs window
+    let is_liked_active = is_active && focus_state == LibraryFocusState::LikedSongs;
+    let liked_selected = if is_liked_active {
         ui.current_page_mut().selected()
     } else {
         None
     };
-    let (album_list, n_albums) = utils::construct_list_widget(
-        &ui.theme,
-        ui.search_filtered_items(&data.user_data.saved_albums)
-            .into_iter()
-            .map(|a| (a.to_bidi_string(), curr_context_uri == Some(a.id.uri())))
-            .collect(),
-        is_album_active,
-        album_selected,
-    );
-    // Construct the followed artist window
-    let is_artist_active = is_active && focus_state == LibraryFocusState::FollowedArtists;
-    let artist_selected = if is_artist_active {
-        ui.current_page_mut().selected()
-    } else {
-        None
-    };
-    let (artist_list, n_artists) = utils::construct_list_widget(
-        &ui.theme,
-        ui.search_filtered_items(&data.user_data.followed_artists)
-            .into_iter()
-            .map(|a| (a.to_bidi_string(), curr_context_uri == Some(a.id.uri())))
-            .collect(),
-        is_artist_active,
-        artist_selected,
-    );
+    let curr_track_uri = state
+        .player
+        .read()
+        .currently_playing()
+        .and_then(|item| match item {
+            rspotify::model::PlayableItem::Track(t) => t.id.as_ref().map(|id| id.uri()),
+            _ => None,
+        });
+
+    let liked_items = ui
+        .search_filtered_items(&data.user_data.saved_tracks_vec)
+        .into_iter()
+        .map(|t| {
+            let is_curr = curr_track_uri.as_deref() == Some(&t.id.uri());
+            (
+                to_bidi_string(&format!("{} • {}", t.display_name(), t.artists_info())),
+                is_curr,
+            )
+        })
+        .collect::<Vec<_>>();
+    let (liked_list, n_liked) =
+        utils::construct_list_widget(&ui.theme, liked_items, is_liked_active, liked_selected);
 
     // 4. Render the page's widgets
     // Render the library page's windows.
@@ -575,17 +561,10 @@ pub fn render_library_page(
     );
     utils::render_list_window(
         frame,
-        album_list,
-        album_rect,
-        n_albums,
-        &mut page_state.saved_album_list,
-    );
-    utils::render_list_window(
-        frame,
-        artist_list,
-        artist_rect,
-        n_artists,
-        &mut page_state.followed_artist_list,
+        liked_list,
+        liked_rect,
+        n_liked,
+        &mut page_state.liked_song_list,
     );
 }
 

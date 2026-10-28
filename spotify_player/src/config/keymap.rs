@@ -329,6 +329,58 @@ impl Default for KeymapConfig {
                     command: Command::JumpToCurrentTrackInContext,
                 },
                 Keymap {
+                    key_sequence: "A-down".into(),
+                    command: Command::IncreasePlaybackHeight,
+                },
+                Keymap {
+                    key_sequence: "A-j".into(),
+                    command: Command::IncreasePlaybackHeight,
+                },
+                Keymap {
+                    key_sequence: "C-down".into(),
+                    command: Command::IncreasePlaybackHeight,
+                },
+                Keymap {
+                    key_sequence: "A-up".into(),
+                    command: Command::DecreasePlaybackHeight,
+                },
+                Keymap {
+                    key_sequence: "A-k".into(),
+                    command: Command::DecreasePlaybackHeight,
+                },
+                Keymap {
+                    key_sequence: "C-up".into(),
+                    command: Command::DecreasePlaybackHeight,
+                },
+                Keymap {
+                    key_sequence: "A-right".into(),
+                    command: Command::IncreasePlaylistSplit,
+                },
+                Keymap {
+                    key_sequence: "A-l".into(),
+                    command: Command::IncreasePlaylistSplit,
+                },
+                Keymap {
+                    key_sequence: "C-right".into(),
+                    command: Command::IncreasePlaylistSplit,
+                },
+                Keymap {
+                    key_sequence: "A-left".into(),
+                    command: Command::DecreasePlaylistSplit,
+                },
+                Keymap {
+                    key_sequence: "A-h".into(),
+                    command: Command::DecreasePlaylistSplit,
+                },
+                Keymap {
+                    key_sequence: "C-left".into(),
+                    command: Command::DecreasePlaylistSplit,
+                },
+                Keymap {
+                    key_sequence: "A-r".into(),
+                    command: Command::ToggleResizeMode,
+                },
+                Keymap {
                     key_sequence: "g o".into(),
                     command: Command::OpenLogs,
                 },

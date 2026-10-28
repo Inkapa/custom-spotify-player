@@ -22,8 +22,13 @@ pub fn render_playback_window(
     ui: &mut UIStateGuard,
     rect: Rect,
 ) -> Rect {
-    let (rect, other_rect) = split_rect_for_playback_window(state, rect);
-    let rect = construct_and_render_block("Playback", &ui.theme, Borders::ALL, frame, rect);
+    let (rect, other_rect) = split_rect_for_playback_window(state, ui, rect);
+    let title = if ui.resize_mode {
+        "Playback [RESIZE: h/j/k/l or arrows, Esc/Enter to exit]"
+    } else {
+        "Playback"
+    };
+    let rect = construct_and_render_block(title, &ui.theme, Borders::ALL, frame, rect);
 
     let player = state.player.read();
     if let Some(ref playback) = player.playback {
@@ -77,6 +82,25 @@ pub fn render_playback_window(
                         rspotify::model::PlayableItem::Unknown(_) => None,
                     };
                     if let Some(url) = url {
+                        let has_img = state.data.read().caches.images.contains_key(&url);
+                        if !has_img {
+                            if let Some(filename) = crate::utils::get_cover_image_filename(item) {
+                                let configs = config::get_config();
+                                let path = configs.cache_folder.join("image").join(&filename);
+                                if path.exists() {
+                                    if let Ok(bytes) = std::fs::read(&path) {
+                                        if let Ok(image) = image::load_from_memory(&bytes) {
+                                            state.data.write().caches.images.insert(
+                                                url.clone(),
+                                                image,
+                                                *crate::state::TTL_CACHE_DURATION,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         let data = state.data.read();
                         if let Some(img) = data.caches.images.get(&url) {
                             if ui.last_cover_image_render_info.url != url
@@ -463,9 +487,13 @@ fn render_playback_progress_bar(
 /// Split the given area into two, the first one for the playback window
 /// and the second one for the main application's layout (popup, page, etc).
 #[allow(unused_variables)]
-fn split_rect_for_playback_window(state: &SharedState, rect: Rect) -> (Rect, Rect) {
+fn split_rect_for_playback_window(
+    state: &SharedState,
+    ui: &UIStateGuard,
+    rect: Rect,
+) -> (Rect, Rect) {
     let configs = config::get_config();
-    let playback_width = configs.app_config.layout.playback_window_height;
+    let playback_width = ui.layout.playback_window_height as usize;
     // the playback window's width should not be smaller than the cover image's width + 1
     #[cfg(feature = "image")]
     let playback_width = if configs.app_config.cover_img_width > 0 {

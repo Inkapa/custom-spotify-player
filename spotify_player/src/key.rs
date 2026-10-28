@@ -65,14 +65,14 @@ impl Key {
     pub fn from_str(s: &str) -> Option<Self> {
         let chars = s.chars().collect::<Vec<_>>();
         if chars.len() > 2 && chars[1] == '-' && chars[2] != ' ' {
-            // M-<c> for alt-<c> and C-<c> for ctrl-<c>
+            // M-<c> or A-<c> for alt-<c> and C-<c> for ctrl-<c>
             let mut chars = chars.into_iter();
             let c = chars.next().unwrap();
             chars.next();
             let key = Self::parse_key_code(&chars.collect::<String>());
             match c {
                 'C' => key.map(Key::Ctrl),
-                'M' => key.map(Key::Alt),
+                'M' | 'A' => key.map(Key::Alt),
                 _ => None,
             }
         } else {

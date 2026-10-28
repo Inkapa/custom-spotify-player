@@ -90,6 +90,12 @@ pub enum Command {
 
     CreatePlaylist,
     OpenLogs,
+
+    IncreasePlaybackHeight,
+    DecreasePlaybackHeight,
+    IncreasePlaylistSplit,
+    DecreasePlaylistSplit,
+    ToggleResizeMode,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -374,6 +380,11 @@ impl Command {
             Self::CreatePlaylist => "create a new playlist",
             Self::VolumeChange { offset: _ } => unreachable!(),
             Self::OpenLogs => "go to the application logs page",
+            Self::IncreasePlaybackHeight => "increase playback window height and cover image size",
+            Self::DecreasePlaybackHeight => "decrease playback window height and cover image size",
+            Self::IncreasePlaylistSplit => "increase playlist column width in library",
+            Self::DecreasePlaylistSplit => "decrease playlist column width in library",
+            Self::ToggleResizeMode => "toggle layout resize mode",
         }
         .to_string()
     }

@@ -24,7 +24,7 @@ use theme::ThemeConfig;
 
 pub use theme::Theme;
 
-use crate::auth::{NCSPOT_CLIENT_ID, SPOTIFY_CLIENT_ID};
+use crate::auth::SPOTIFY_CLIENT_ID;
 
 static CONFIGS: OnceLock<Configs> = OnceLock::new();
 
@@ -305,7 +305,7 @@ impl Default for AppConfig {
             //
             // [extended quota mode]: https://developer.spotify.com/documentation/web-api/concepts/quota-modes
             // [spotify API changes]: https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api
-            client_id: NCSPOT_CLIENT_ID.to_string(),
+            client_id: SPOTIFY_CLIENT_ID.to_string(),
             client_id_command: None,
             ncspot_only_get_endpoints: DEFAULT_NCSPOT_ONLY_GET_ENDPOINTS
                 .iter()
@@ -498,7 +498,7 @@ impl AppConfig {
         SessionConfig {
             proxy,
             ap_port: self.ap_port,
-            client_id: SPOTIFY_CLIENT_ID.to_string(),
+            client_id: crate::auth::OFFICIAL_SPOTIFY_CLIENT_ID.to_string(),
             autoplay: Some(self.device.autoplay),
             ..Default::default()
         }

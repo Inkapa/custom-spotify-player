@@ -432,6 +432,60 @@ pub fn handle_command_for_track_list_window(
     Ok(true)
 }
 
+pub fn handle_command_for_liked_songs_list_window(
+    command: Command,
+    client_pub: &flume::Sender<ClientRequest>,
+    tracks: &[&Track],
+    data: &DataReadGuard,
+    ui: &mut UIStateGuard,
+    state: &SharedState,
+) -> Result<bool> {
+    let id = ui.current_page_mut().selected().unwrap_or_default();
+    if id >= tracks.len() {
+        return Ok(false);
+    }
+
+    let count = ui.count_prefix;
+    if handle_navigation_command(command, ui.current_page_mut(), id, tracks.len(), count) {
+        return Ok(true);
+    }
+    match command {
+        Command::PlayRandom | Command::ChooseSelected => {
+            state.player.write().currently_playing_tracks_id =
+                Some(crate::state::USER_LIKED_TRACKS_ID.clone());
+            let uri = if command == Command::PlayRandom {
+                tracks[rand::rng().random_range(0..tracks.len())].id.uri()
+            } else {
+                tracks[id].id.uri()
+            };
+            let playback = Playback::URIs(
+                tracks.iter().map(|t| t.id.clone().into()).collect(),
+                None,
+            )
+            .uri_offset(uri, 50);
+
+            client_pub.send(ClientRequest::Player(PlayerRequest::StartPlayback(
+                playback,
+                None,
+            )))?;
+        }
+        Command::ShowActionsOnSelectedItem => {
+            let actions = command::construct_track_actions(tracks[id], data);
+            ui.popup = Some(PopupState::ActionList(
+                Box::new(ActionListItem::Track(tracks[id].clone(), actions)),
+                ListState::default(),
+            ));
+        }
+        Command::AddSelectedItemToQueue => {
+            client_pub.send(ClientRequest::AddPlayableToQueue(
+                tracks[id].id.clone().into(),
+            ))?;
+        }
+        _ => return Ok(false),
+    }
+    Ok(true)
+}
+
 pub fn handle_command_for_artist_list_window(
     command: Command,
     artists: &[&Artist],

@@ -1,7 +1,7 @@
 use std::io::{BufReader, BufWriter};
 use std::{collections::HashMap, path::Path};
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::sync::LazyLock;
 
 use super::model::{
@@ -20,6 +20,24 @@ pub enum FileCacheKey {
     SavedShows,
     SavedAlbums,
     SavedTracks,
+    SavedTracksVec,
+    LastPlayback,
+    LayoutSettings,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct LayoutSettings {
+    pub playback_window_height: u16,
+    pub playlist_percent: u16,
+}
+
+impl Default for LayoutSettings {
+    fn default() -> Self {
+        Self {
+            playback_window_height: 11,
+            playlist_percent: 50,
+        }
+    }
 }
 
 /// default time-to-live cache duration
@@ -43,6 +61,7 @@ pub struct UserData {
     pub saved_shows: Vec<Show>,
     pub saved_albums: Vec<Album>,
     pub saved_tracks: HashMap<String, Track>,
+    pub saved_tracks_vec: Vec<Track>,
 }
 
 #[derive(Debug)]
@@ -163,6 +182,18 @@ impl AppData {
 impl UserData {
     /// Construct a new user data based on file caches
     pub fn new_from_file_caches(cache_folder: &Path) -> Self {
+        let saved_tracks: HashMap<String, Track> =
+            load_data_from_file_cache(FileCacheKey::SavedTracks, cache_folder)
+                .unwrap_or_default();
+        let mut saved_tracks_vec: Vec<Track> =
+            load_data_from_file_cache(FileCacheKey::SavedTracksVec, cache_folder)
+                .unwrap_or_default();
+        if saved_tracks_vec.is_empty() && !saved_tracks.is_empty() {
+            let mut tracks: Vec<Track> = saved_tracks.values().cloned().collect();
+            tracks.sort_by_key(|t| std::cmp::Reverse(t.added_at));
+            saved_tracks_vec = tracks;
+        }
+
         Self {
             user: None,
             playlists: load_data_from_file_cache(FileCacheKey::Playlists, cache_folder)
@@ -180,8 +211,8 @@ impl UserData {
                 .unwrap_or_default(),
             saved_albums: load_data_from_file_cache(FileCacheKey::SavedAlbums, cache_folder)
                 .unwrap_or_default(),
-            saved_tracks: load_data_from_file_cache(FileCacheKey::SavedTracks, cache_folder)
-                .unwrap_or_default(),
+            saved_tracks,
+            saved_tracks_vec,
         }
     }
 

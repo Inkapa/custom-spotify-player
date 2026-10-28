@@ -67,20 +67,14 @@ fn handle_action_for_library_page(
             ui,
             client_pub,
         ),
-        LibraryFocusState::SavedAlbums => window::handle_action_for_selected_item(
+        LibraryFocusState::LikedSongs => window::handle_action_for_selected_item(
             action,
-            &ui.search_filtered_items(&data.user_data.saved_albums),
+            &ui.search_filtered_items(&data.user_data.saved_tracks_vec),
             &data,
             ui,
             client_pub,
         ),
-        LibraryFocusState::FollowedArtists => window::handle_action_for_selected_item(
-            action,
-            &ui.search_filtered_items(&data.user_data.followed_artists),
-            &data,
-            ui,
-            client_pub,
-        ),
+
     }
 }
 
@@ -126,6 +120,11 @@ fn handle_command_for_library_page(
         data.user_data
             .followed_artists
             .sort_by_key(|x| x.name.to_lowercase());
+
+        // Sort liked songs alphabetically
+        data.user_data
+            .saved_tracks_vec
+            .sort_by_key(|x| x.name.to_lowercase());
     }
 
     if command == Command::SortLibraryByRecent {
@@ -155,6 +154,11 @@ fn handle_command_for_library_page(
         data.user_data
             .saved_albums
             .sort_by_key(|a| std::cmp::Reverse(a.added_at));
+
+        // Sort liked songs by recent addition
+        data.user_data
+            .saved_tracks_vec
+            .sort_by_key(|t| std::cmp::Reverse(t.added_at));
     }
 
     match focus_state {
@@ -170,26 +174,16 @@ fn handle_command_for_library_page(
                 ui,
             ))
         }
-        LibraryFocusState::SavedAlbums => {
-            // Use a read lock for the function call
+        LibraryFocusState::LikedSongs => {
             let data = state.data.read();
-            window::handle_command_for_album_list_window(
+            window::handle_command_for_liked_songs_list_window(
                 command,
-                &ui.search_filtered_items(&data.user_data.saved_albums),
-                &data,
-                ui,
                 client_pub,
-            )
-        }
-        LibraryFocusState::FollowedArtists => {
-            // Handle artist-specific commands
-            let data = state.data.read();
-            Ok(window::handle_command_for_artist_list_window(
-                command,
-                &ui.search_filtered_items(&data.user_data.followed_artists),
+                &ui.search_filtered_items(&data.user_data.saved_tracks_vec),
                 &data,
                 ui,
-            ))
+                state,
+            )
         }
     }
 }

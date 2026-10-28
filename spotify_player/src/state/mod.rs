@@ -49,11 +49,25 @@ impl State {
             ui.theme = theme;
         }
 
+        let cached_layout: Option<LayoutSettings> =
+            load_data_from_file_cache(
+                FileCacheKey::LayoutSettings,
+                &configs.cache_folder,
+            );
+        if let Some(layout) = cached_layout {
+            ui.layout = layout;
+        } else {
+            ui.layout = LayoutSettings {
+                playback_window_height: configs.app_config.layout.playback_window_height as u16,
+                playlist_percent: configs.app_config.layout.library.playlist_percent,
+            };
+        }
+
         let app_data = AppData::new(&configs.cache_folder);
 
         Self {
             ui: Mutex::new(ui),
-            player: RwLock::new(PlayerState::default()),
+            player: RwLock::new(PlayerState::new(&configs.cache_folder)),
             data: RwLock::new(app_data),
             is_daemon,
             #[cfg(feature = "streaming")]

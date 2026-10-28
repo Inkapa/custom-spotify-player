@@ -307,13 +307,32 @@ impl BaseClient for WebApiClient {
                 if url.starts_with("playlists/")
                     && !url.contains("/items")
                     && !url.contains("/tracks")
-                    && !text.contains("\"items\":")
-                    && !text.contains("\"tracks\":") =>
+                    && (!text.contains("\"items\":")
+                        || !text.contains("\"tracks\":")
+                        || text.contains("\"total\":0")
+                        || text.contains("\"total\": 0")
+                        || text.contains("\"items\":[]")
+                        || text.contains("\"items\": []")) =>
             {
                 if let Some(ref fallback) = self.fallback {
                     tracing::warn!(
                         url,
                         "Playlist returned without tracks (external playlist in Development Mode); retrying with ncspot fallback"
+                    );
+                    fallback.api_get(url, payload).await
+                } else {
+                    Ok(text.clone())
+                }
+            }
+            Ok(ref text)
+                if url.starts_with("playlists/")
+                    && (url.contains("/items") || url.contains("/tracks"))
+                    && (text.contains("\"items\":[]") || text.contains("\"items\": []")) =>
+            {
+                if let Some(ref fallback) = self.fallback {
+                    tracing::warn!(
+                        url,
+                        "Playlist items returned empty (external playlist in Development Mode); retrying with ncspot fallback"
                     );
                     fallback.api_get(url, payload).await
                 } else {

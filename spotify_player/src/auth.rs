@@ -11,7 +11,8 @@ use reqwest::Url;
 use rspotify::clients::{BaseClient as _, OAuthClient as _};
 use sha2::{Digest as _, Sha256};
 
-pub const SPOTIFY_CLIENT_ID: &str = "65b708073fc0480ea92a077233ca87bd";
+pub const OFFICIAL_SPOTIFY_CLIENT_ID: &str = "65b708073fc0480ea92a077233ca87bd";
+pub const SPOTIFY_CLIENT_ID: &str = OFFICIAL_SPOTIFY_CLIENT_ID;
 pub const NCSPOT_CLIENT_ID: &str = "d420a117a32841c2b3474932e49fb54b";
 pub const NCSPOT_REDIRECT_URI: &str = "http://127.0.0.1:8989/login";
 
@@ -42,8 +43,6 @@ pub const OAUTH_SCOPES: &[&str] = &[
     // Library
     "user-library-modify",
     "user-library-read",
-    // Users
-    "user-personalized",
 ];
 
 #[derive(Clone)]
@@ -110,7 +109,7 @@ pub fn get_creds(auth_config: &AuthConfig, reauth: bool, use_cached: bool) -> Re
                 println!("Authenticating the librespot streaming client...");
 
                 let access_token = get_oauth_access_token(
-                    SPOTIFY_CLIENT_ID,
+                    OFFICIAL_SPOTIFY_CLIENT_ID,
                     &auth_config.login_redirect_uri,
                     OAUTH_SCOPES,
                 )?;

@@ -126,6 +126,32 @@ fn handle_key_event(
     let key: Key = event.into();
     let mut ui = state.ui.lock();
 
+    if ui.resize_mode {
+        match key {
+            Key::None(KeyCode::Char('h')) | Key::None(KeyCode::Left) => {
+                let _ = handle_global_command(Command::DecreasePlaylistSplit, client_pub, state, &mut ui, None)?;
+                return Ok(());
+            }
+            Key::None(KeyCode::Char('l')) | Key::None(KeyCode::Right) => {
+                let _ = handle_global_command(Command::IncreasePlaylistSplit, client_pub, state, &mut ui, None)?;
+                return Ok(());
+            }
+            Key::None(KeyCode::Char('j')) | Key::None(KeyCode::Down) => {
+                let _ = handle_global_command(Command::IncreasePlaybackHeight, client_pub, state, &mut ui, None)?;
+                return Ok(());
+            }
+            Key::None(KeyCode::Char('k')) | Key::None(KeyCode::Up) => {
+                let _ = handle_global_command(Command::DecreasePlaybackHeight, client_pub, state, &mut ui, None)?;
+                return Ok(());
+            }
+            Key::None(KeyCode::Esc) | Key::None(KeyCode::Enter) | Key::Alt(KeyCode::Char('r')) => {
+                ui.resize_mode = false;
+                return Ok(());
+            }
+            _ => {}
+        }
+    }
+
     let mut key_sequence = ui.input_key_sequence.clone();
     key_sequence.keys.push(key);
 
@@ -642,6 +668,45 @@ fn handle_global_command(
         }
         Command::OpenLogs => {
             ui.new_page(PageState::Logs { scroll_offset: 0 });
+        }
+        Command::IncreasePlaybackHeight => {
+            ui.layout.playback_window_height = (ui.layout.playback_window_height + 1).min(40);
+            let configs = config::get_config();
+            let _ = crate::state::store_data_into_file_cache(
+                crate::state::FileCacheKey::LayoutSettings,
+                &configs.cache_folder,
+                &ui.layout,
+            );
+        }
+        Command::DecreasePlaybackHeight => {
+            ui.layout.playback_window_height = ui.layout.playback_window_height.saturating_sub(1).max(3);
+            let configs = config::get_config();
+            let _ = crate::state::store_data_into_file_cache(
+                crate::state::FileCacheKey::LayoutSettings,
+                &configs.cache_folder,
+                &ui.layout,
+            );
+        }
+        Command::IncreasePlaylistSplit => {
+            ui.layout.playlist_percent = (ui.layout.playlist_percent + 2).min(90);
+            let configs = config::get_config();
+            let _ = crate::state::store_data_into_file_cache(
+                crate::state::FileCacheKey::LayoutSettings,
+                &configs.cache_folder,
+                &ui.layout,
+            );
+        }
+        Command::DecreasePlaylistSplit => {
+            ui.layout.playlist_percent = ui.layout.playlist_percent.saturating_sub(2).max(10);
+            let configs = config::get_config();
+            let _ = crate::state::store_data_into_file_cache(
+                crate::state::FileCacheKey::LayoutSettings,
+                &configs.cache_folder,
+                &ui.layout,
+            );
+        }
+        Command::ToggleResizeMode => {
+            ui.resize_mode = !ui.resize_mode;
         }
         Command::RefreshPlayback => {
             client_pub.send(ClientRequest::GetCurrentPlayback)?;

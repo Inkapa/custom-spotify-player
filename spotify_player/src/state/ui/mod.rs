@@ -52,6 +52,9 @@ pub struct UIState {
     /// which is mainly used to handle mouse click events (for seeking command)
     pub playback_progress_bar_rect: ratatui::layout::Rect,
 
+    pub layout: crate::state::data::LayoutSettings,
+    pub resize_mode: bool,
+
     /// Count prefix for vim-style navigation (e.g., 5j, 10k)
     pub count_prefix: Option<usize>,
 
@@ -129,6 +132,8 @@ impl Default for UIState {
             popup: None,
 
             playback_progress_bar_rect: Rect::default(),
+            layout: crate::state::data::LayoutSettings::default(),
+            resize_mode: false,
 
             count_prefix: None,
 

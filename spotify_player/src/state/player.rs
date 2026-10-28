@@ -26,6 +26,20 @@ pub struct PlayerState {
 }
 
 impl PlayerState {
+    pub fn new(cache_folder: &std::path::Path) -> Self {
+        let mut state = Self::default();
+        if let Some(mut playback) = crate::state::data::load_data_from_file_cache::<
+            rspotify::model::CurrentPlaybackContext,
+        >(crate::state::data::FileCacheKey::LastPlayback, cache_folder)
+        {
+            playback.is_playing = false;
+            state.buffered_playback = Some(PlaybackMetadata::from_playback(&playback));
+            state.playback = Some(playback);
+            state.playback_last_updated_time = Some(std::time::Instant::now());
+        }
+        state
+    }
+
     /// Get the current playback
     ///
     /// # Note

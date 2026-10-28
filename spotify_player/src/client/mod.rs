@@ -359,6 +359,7 @@ impl AppClient {
     /// Handle a player request, return a new playback metadata on success
     pub async fn handle_player_request(
         &self,
+        state: Option<&SharedState>,
         request: PlayerRequest,
         mut playback: Option<PlaybackMetadata>,
     ) -> Result<Option<PlaybackMetadata>> {
@@ -396,7 +397,25 @@ impl AppClient {
             PlayerRequest::PreviousTrack => self.previous_track(device_id).await?,
             PlayerRequest::Resume => {
                 if !playback.is_playing {
-                    self.resume_playback(device_id, None).await?;
+                    if let Err(err) = self.resume_playback(device_id, None).await {
+                        tracing::warn!("Failed to resume playback ({err:#}); restarting from track");
+                        if let Some(state) = state {
+                            let (playable_id, progress) = {
+                                let player = state.player.read();
+                                let playable_id = player.playback.as_ref().and_then(|p| match p.item.as_ref() {
+                                    Some(rspotify::model::PlayableItem::Track(t)) => t.id.as_ref().map(|id| PlayableId::Track(id.clone_static())),
+                                    Some(rspotify::model::PlayableItem::Episode(e)) => Some(PlayableId::Episode(e.id.clone())),
+                                    _ => None,
+                                });
+                                let progress = player.playback.as_ref().and_then(|p| p.progress);
+                                (playable_id, progress)
+                            };
+                            if let Some(playable_id) = playable_id {
+                                let offset = progress.map(rspotify::model::Offset::Position);
+                                let _ = self.start_playback(Playback::URIs(vec![playable_id], offset), device_id).await;
+                            }
+                        }
+                    }
                     playback.is_playing = true;
                 }
             }
@@ -411,7 +430,25 @@ impl AppClient {
                 if playback.is_playing {
                     self.pause_playback(device_id).await?;
                 } else {
-                    self.resume_playback(device_id, None).await?;
+                    if let Err(err) = self.resume_playback(device_id, None).await {
+                        tracing::warn!("Failed to resume playback ({err:#}); restarting from track");
+                        if let Some(state) = state {
+                            let (playable_id, progress) = {
+                                let player = state.player.read();
+                                let playable_id = player.playback.as_ref().and_then(|p| match p.item.as_ref() {
+                                    Some(rspotify::model::PlayableItem::Track(t)) => t.id.as_ref().map(|id| PlayableId::Track(id.clone_static())),
+                                    Some(rspotify::model::PlayableItem::Episode(e)) => Some(PlayableId::Episode(e.id.clone())),
+                                    _ => None,
+                                });
+                                let progress = player.playback.as_ref().and_then(|p| p.progress);
+                                (playable_id, progress)
+                            };
+                            if let Some(playable_id) = playable_id {
+                                let offset = progress.map(rspotify::model::Offset::Position);
+                                let _ = self.start_playback(Playback::URIs(vec![playable_id], offset), device_id).await;
+                            }
+                        }
+                    }
                 }
                 playback.is_playing = !playback.is_playing;
             }
@@ -509,7 +546,7 @@ impl AppClient {
             }
             ClientRequest::Player(request) => {
                 let playback = state.player.read().buffered_playback.clone();
-                let playback = self.handle_player_request(request, playback).await?;
+                let playback = self.handle_player_request(Some(state), request, playback).await?;
                 state.player.write().buffered_playback = playback;
                 self.update_playback_non_blocking(state);
             }
@@ -615,7 +652,17 @@ impl AppClient {
                                     &tracks_hm,
                                 )
                                 .context("store user's saved tracks into the cache folder")?;
-                                state.data.write().user_data.saved_tracks = tracks_hm;
+                                store_data_into_file_cache(
+                                    FileCacheKey::SavedTracksVec,
+                                    &config::get_config().cache_folder,
+                                    &tracks,
+                                )
+                                .context("store user's saved tracks vec into the cache folder")?;
+                                {
+                                    let mut data = state.data.write();
+                                    data.user_data.saved_tracks = tracks_hm;
+                                    data.user_data.saved_tracks_vec = tracks.clone();
+                                }
                                 Context::Tracks {
                                     tracks,
                                     desc: "User's liked tracks".to_string(),
@@ -1316,12 +1363,17 @@ impl AppClient {
                     self.library_add([LibraryId::Track(track.id.as_ref())])
                         .await?;
                     // update the in-memory `user_data`
-                    state
-                        .data
-                        .write()
-                        .user_data
-                        .saved_tracks
-                        .insert(track.id.uri(), track);
+                    {
+                        let mut data = state.data.write();
+                        data.user_data.saved_tracks.insert(track.id.uri(), track.clone());
+                        data.user_data.saved_tracks_vec.retain(|t| t.id != track.id);
+                        data.user_data.saved_tracks_vec.insert(0, track);
+                        let _ = store_data_into_file_cache(
+                            FileCacheKey::SavedTracksVec,
+                            &config::get_config().cache_folder,
+                            &data.user_data.saved_tracks_vec,
+                        );
+                    }
                 }
             }
             Item::Album(album) => {
@@ -1398,7 +1450,14 @@ impl AppClient {
             ItemId::Track(id) => {
                 let uri = id.uri();
                 self.library_remove([LibraryId::Track(id)]).await?;
-                state.data.write().user_data.saved_tracks.remove(&uri);
+                let mut data = state.data.write();
+                data.user_data.saved_tracks.remove(&uri);
+                data.user_data.saved_tracks_vec.retain(|t| t.id.uri() != uri);
+                let _ = store_data_into_file_cache(
+                    FileCacheKey::SavedTracksVec,
+                    &config::get_config().cache_folder,
+                    &data.user_data.saved_tracks_vec,
+                );
             }
             ItemId::Album(id) => {
                 state
@@ -1679,39 +1738,65 @@ impl AppClient {
                 Some(rspotify::model::PlayableItem::Unknown(_)) | None => String::new(),
             };
 
-            player.playback = playback;
-            player.playback_last_updated_time = Some(std::time::Instant::now());
+            let mut new_playback = false;
 
-            let curr_item = player.currently_playing();
+            match playback {
+                Some(playback) => {
+                    player.playback = Some(playback);
+                    player.playback_last_updated_time = Some(std::time::Instant::now());
 
-            let curr_name = match curr_item {
-                Some(rspotify::model::PlayableItem::Track(track)) => track.name.clone(),
-                Some(rspotify::model::PlayableItem::Episode(episode)) => episode.name.clone(),
-                Some(rspotify::model::PlayableItem::Unknown(_)) | None => String::new(),
-            };
+                    let curr_item = player.currently_playing();
 
-            let new_playback = prev_name != curr_name && !curr_name.is_empty();
-            // check if we need to update the buffered playback
-            let needs_update = match (&player.buffered_playback, &player.playback) {
-                (Some(bp), Some(p)) => bp.device_id != p.device.id || new_playback,
-                (None, None) => false,
-                _ => true,
-            };
+                    let curr_name = match curr_item {
+                        Some(rspotify::model::PlayableItem::Track(track)) => track.name.clone(),
+                        Some(rspotify::model::PlayableItem::Episode(episode)) => episode.name.clone(),
+                        Some(rspotify::model::PlayableItem::Unknown(_)) | None => String::new(),
+                    };
 
-            if reset_buffered_playback || needs_update {
-                player.buffered_playback = player.playback.as_ref().map(|p| {
-                    let mut playback = PlaybackMetadata::from_playback(p);
+                    new_playback = prev_name != curr_name && !curr_name.is_empty();
+                    // check if we need to update the buffered playback
+                    let needs_update = match (&player.buffered_playback, &player.playback) {
+                        (Some(bp), Some(p)) => bp.device_id != p.device.id || new_playback,
+                        (None, None) => false,
+                        _ => true,
+                    };
 
-                    // handle additional data from the previous buffered state
-                    // that is not available in a standard Spotify playback's state
-                    if let Some(bp) = &player.buffered_playback {
-                        if let Some(volume) = bp.mute_state {
-                            playback.volume = Some(volume);
-                        }
-                        playback.mute_state = bp.mute_state;
+                    if reset_buffered_playback || needs_update {
+                        player.buffered_playback = player.playback.as_ref().map(|p| {
+                            let mut playback = PlaybackMetadata::from_playback(p);
+
+                            // handle additional data from the previous buffered state
+                            // that is not available in a standard Spotify playback's state
+                            if let Some(bp) = &player.buffered_playback {
+                                if let Some(volume) = bp.mute_state {
+                                    playback.volume = Some(volume);
+                                }
+                                playback.mute_state = bp.mute_state;
+                            }
+                            playback
+                        });
                     }
-                    playback
-                });
+
+                    if let Some(ref p) = player.playback {
+                        if p.item.is_some() {
+                            let _ = store_data_into_file_cache(
+                                FileCacheKey::LastPlayback,
+                                &config::get_config().cache_folder,
+                                p,
+                            );
+                        }
+                    }
+                }
+                None => {
+                    // Spotify returned no active playback (e.g. idle timeout after pause).
+                    // Preserve the last track and cover art, but mark as paused.
+                    if let Some(ref mut current) = player.playback {
+                        current.is_playing = false;
+                    }
+                    if let Some(ref mut bp) = player.buffered_playback {
+                        bp.is_playing = false;
+                    }
+                }
             }
 
             new_playback
@@ -1783,29 +1868,10 @@ impl AppClient {
             rspotify::model::PlayableItem::Unknown(_) => return Ok(()),
         };
 
-        let filename = (match curr_item {
-            rspotify::model::PlayableItem::Track(ref track) => {
-                format!(
-                    "{}-{}-cover-{}.jpg",
-                    track.album.name,
-                    track.album.artists.first().unwrap().name,
-                    // first 6 characters of the album's id
-                    &track.album.id.as_ref().unwrap().id()[..6]
-                )
-            }
-            #[allow(deprecated)]
-            rspotify::model::PlayableItem::Episode(ref episode) => {
-                format!(
-                    "{}-{}-cover-{}.jpg",
-                    episode.show.name,
-                    episode.show.publisher,
-                    // first 6 characters of the show's id
-                    &episode.show.id.as_ref().id()[..6]
-                )
-            }
-            rspotify::model::PlayableItem::Unknown(_) => return Ok(()),
-        })
-        .replace('/', ""); // remove invalid characters from the file's name
+        let filename = match crate::utils::get_cover_image_filename(&curr_item) {
+            Some(filename) => filename,
+            None => return Ok(()),
+        };
         let path = configs.cache_folder.join("image").join(filename);
 
         if configs.app_config.enable_cover_image_cache {
