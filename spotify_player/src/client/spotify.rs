@@ -89,14 +89,14 @@ impl BaseClient for Spotify {
         let old_token = self.token.lock().await.unwrap().clone();
 
         if session.is_invalid() {
-            tracing::error!("Failed to get a new token: invalid session");
+            tracing::debug!("Cannot refetch token: Spotify session is invalid");
             return Ok(old_token);
         }
 
         match token::get_token_rspotify(&session).await {
             Ok(token) => Ok(Some(token)),
             Err(err) => {
-                tracing::error!("Failed to get a new token: {err:#}");
+                tracing::warn!("Failed to get a new token: {err:#}");
                 Ok(old_token)
             }
         }
@@ -660,7 +660,8 @@ mod tests {
         let client = WebApiClient::new(
             client_with_token(&server, false, "primary-token").await,
             Some(client_with_token(&server, true, "fallback-token").await),
-        );
+        )
+        .with_ncspot_only_get_endpoints(vec!["me/playlists".to_string()]);
 
         assert_eq!(
             client.api_get("me/playlists", &Query::new()).await.unwrap(),

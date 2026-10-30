@@ -15,9 +15,9 @@ use super::ClientRequest;
 
 struct PlayerEventHandlerState {
     ended_playable_uri: Option<String>,
-    last_get_context: Instant,
+    last_get_context: Option<(String, Instant, u32)>,
     last_playback_refresh: Instant,
-    last_queue_refresh: Option<(String, Instant)>,
+    last_queue_refresh: Option<(String, Instant, u32)>,
 }
 
 /// starts the client's request handler
@@ -34,7 +34,13 @@ pub async fn start_client_handler(
         tokio::task::spawn(
             async move {
                 if let Err(err) = client.handle_request(&state, request).await {
-                    tracing::error!("Failed to handle client request: {err:#}");
+                    if client.is_session_invalid().await {
+                        tracing::debug!(
+                            "Failed to handle client request while session is invalid: {err:#}"
+                        );
+                    } else {
+                        tracing::error!("Failed to handle client request: {err:#}");
+                    }
                 }
             }
             .instrument(span),
@@ -43,20 +49,60 @@ pub async fn start_client_handler(
 }
 
 /// Interval between background session-validity checks.
-const SESSION_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+const SESSION_CHECK_INTERVAL: Duration = Duration::from_secs(2);
+const SESSION_RECONNECT_MAX_BACKOFF: Duration = Duration::from_secs(30);
 const CONTEXT_REFRESH_THROTTLE: Duration = Duration::from_secs(5);
 const QUEUE_REFRESH_THROTTLE: Duration = Duration::from_secs(5);
 
 pub async fn start_session_watcher(state: SharedState, client: super::AppClient) {
-    let mut interval = tokio::time::interval(SESSION_CHECK_INTERVAL);
-    // If a check ever runs long (e.g. a slow reconnect), skip missed ticks
-    // rather than firing them back-to-back.
-    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut current_interval = SESSION_CHECK_INTERVAL;
+    let mut failure_count = 0usize;
 
     loop {
-        interval.tick().await;
-        if let Err(err) = client.check_valid_session(&state).await {
-            tracing::error!("Failed to check/reconnect the client's session: {err:#}");
+        tokio::time::sleep(current_interval).await;
+
+        if !client.is_session_invalid().await {
+            if failure_count > 0 {
+                tracing::info!(
+                    "Spotify session restored after {failure_count} failed reconnect attempts"
+                );
+                failure_count = 0;
+                current_interval = SESSION_CHECK_INTERVAL;
+            }
+            continue;
+        }
+
+        failure_count += 1;
+        if failure_count == 1 {
+            tracing::warn!("Spotify session is invalid, attempting to reconnect...");
+        } else if failure_count.is_multiple_of(10) {
+            tracing::warn!(
+                "Spotify session still disconnected after {failure_count} reconnect attempts, retrying..."
+            );
+        }
+
+        match client.new_session(Some(&state), false).await {
+            Ok(()) => {
+                tracing::info!(
+                    "Spotify session successfully reconnected after {failure_count} attempts"
+                );
+                failure_count = 0;
+                current_interval = SESSION_CHECK_INTERVAL;
+            }
+            Err(err) => {
+                if failure_count == 1 {
+                    tracing::error!("Failed to reconnect client session: {err:#}");
+                } else {
+                    tracing::debug!(
+                        "Failed to reconnect client session (attempt {failure_count}): {err:#}"
+                    );
+                }
+                let shift = failure_count.min(5) as u32;
+                current_interval = std::cmp::min(
+                    SESSION_CHECK_INTERVAL * 2u32.saturating_pow(shift),
+                    SESSION_RECONNECT_MAX_BACKOFF,
+                );
+            }
         }
     }
 }
@@ -102,18 +148,23 @@ fn handle_playback_change_event(
             .is_none_or(|queue_item| queue_item.id().expect("null track_id") != id)
     });
     if queue_needs_refresh {
-        let should_refresh =
-            handler_state
-                .last_queue_refresh
-                .as_ref()
-                .is_none_or(|(last_uri, timer)| {
-                    last_uri != &playable_uri || timer.elapsed() >= QUEUE_REFRESH_THROTTLE
-                });
+        let should_refresh = match &handler_state.last_queue_refresh {
+            Some((last_uri, timer, attempts)) if last_uri == &playable_uri => {
+                let shift = (*attempts).min(4);
+                let throttle = QUEUE_REFRESH_THROTTLE * 2u32.saturating_pow(shift);
+                timer.elapsed() >= throttle
+            }
+            _ => true,
+        };
         if should_refresh {
-            handler_state.last_queue_refresh = Some((playable_uri, Instant::now()));
+            let next_attempts = match &handler_state.last_queue_refresh {
+                Some((last_uri, _, attempts)) if last_uri == &playable_uri => attempts + 1,
+                _ => 0,
+            };
+            handler_state.last_queue_refresh = Some((playable_uri, Instant::now(), next_attempts));
             client_pub.send(ClientRequest::GetCurrentUserQueue)?;
         }
-    } else if !queue_needs_refresh {
+    } else {
         handler_state.last_queue_refresh = None;
     }
 
@@ -166,13 +217,48 @@ fn handle_page_change_event(
             // To avoid making too many requests, only request if context id is changed
             // or it's been a while since the last request.
             if let Some(id) = id {
-                if !matches!(id, ContextId::Tracks(_))
-                    && !state.data.read().caches.context.contains_key(&id.uri())
-                    && (new_id
-                        || handler_state.last_get_context.elapsed() > CONTEXT_REFRESH_THROTTLE)
-                {
-                    client_pub.send(ClientRequest::GetContext(id.clone()))?;
-                    handler_state.last_get_context = Instant::now();
+                let context_uri = id.uri();
+                let is_tracks = matches!(id, ContextId::Tracks(_));
+                let (is_cached, is_in_flight) = {
+                    let data = state.data.read();
+                    (
+                        data.caches.context.contains_key(&context_uri),
+                        data.caches.context_in_flight.contains(&context_uri),
+                    )
+                };
+
+                if !is_tracks && !is_cached && !is_in_flight {
+                    let should_request = if new_id {
+                        true
+                    } else {
+                        match &handler_state.last_get_context {
+                            Some((last_uri, timer, attempts)) if last_uri == &context_uri => {
+                                let shift = (*attempts).min(4);
+                                let throttle =
+                                    CONTEXT_REFRESH_THROTTLE * 2u32.saturating_pow(shift);
+                                timer.elapsed() >= throttle
+                            }
+                            _ => true,
+                        }
+                    };
+
+                    if should_request {
+                        let next_attempts = if new_id {
+                            0
+                        } else {
+                            match &handler_state.last_get_context {
+                                Some((last_uri, _, attempts)) if last_uri == &context_uri => {
+                                    attempts + 1
+                                }
+                                _ => 0,
+                            }
+                        };
+                        handler_state.last_get_context =
+                            Some((context_uri, Instant::now(), next_attempts));
+                        client_pub.send(ClientRequest::GetContext(id.clone()))?;
+                    }
+                } else if is_cached {
+                    handler_state.last_get_context = None;
                 }
             }
         }
@@ -225,7 +311,7 @@ pub fn start_player_event_watcher(state: &SharedState, client_pub: &flume::Sende
     let playback_refresh_duration =
         Duration::from_millis(configs.app_config.playback_refresh_duration_in_ms);
     let mut handler_state = PlayerEventHandlerState {
-        last_get_context: Instant::now(),
+        last_get_context: None,
         last_playback_refresh: Instant::now(),
         ended_playable_uri: None,
         last_queue_refresh: None,

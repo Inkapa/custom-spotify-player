@@ -306,15 +306,9 @@ impl AppClient {
         Ok(())
     }
 
-    /// Check if the current session is valid and if invalid, create a new session
-    pub async fn check_valid_session(&self, state: &SharedState) -> Result<()> {
-        if self.spotify.session().await.is_invalid() {
-            tracing::info!("Client's current session is invalid, creating a new session...");
-            self.new_session(Some(state), false)
-                .await
-                .context("create new client session")?;
-        }
-        Ok(())
+    /// Check if the client's session is invalid
+    pub async fn is_session_invalid(&self) -> bool {
+        self.spotify.session().await.is_invalid()
     }
 
     /// Create a new streaming connection
@@ -659,21 +653,29 @@ impl AppClient {
                     && !state.data.read().caches.context.contains_key(&uri);
                 let is_liked = uri == USER_LIKED_TRACKS_URI;
                 if cache_miss || is_liked {
-                    let ctx = match context {
-                        ContextId::Playlist(playlist_id) => {
-                            self.playlist_context(playlist_id).await?
+                    {
+                        let mut data = state.data.write();
+                        if !data.caches.context_in_flight.insert(uri.clone()) {
+                            // Request is already being fetched by another task; avoid duplicate work.
+                            return Ok(());
                         }
-                        ContextId::Album(album_id) => self.album_context(album_id).await?,
-                        ContextId::Artist(artist_id) => self.artist_context(artist_id).await?,
+                    }
+
+                    let context_result = match context {
+                        ContextId::Playlist(playlist_id) => {
+                            self.playlist_context(playlist_id).await
+                        }
+                        ContextId::Album(album_id) => self.album_context(album_id).await,
+                        ContextId::Artist(artist_id) => self.artist_context(artist_id).await,
                         ContextId::Tracks(tracks_id) => match tracks_id.uri.as_str() {
-                            USER_TOP_TRACKS_URI => Context::Tracks {
+                            USER_TOP_TRACKS_URI => Ok(Context::Tracks {
                                 tracks: self.current_user_top_tracks().await?,
                                 desc: "User's top tracks".to_string(),
-                            },
-                            USER_RECENTLY_PLAYED_TRACKS_URI => Context::Tracks {
+                            }),
+                            USER_RECENTLY_PLAYED_TRACKS_URI => Ok(Context::Tracks {
                                 tracks: self.current_user_recently_played_tracks().await?,
                                 desc: "User's recently played tracks".to_string(),
-                            },
+                            }),
                             USER_LIKED_TRACKS_URI => {
                                 let tracks = self.current_user_saved_tracks().await?;
                                 let tracks_hm = tracks
@@ -697,20 +699,23 @@ impl AppClient {
                                     data.user_data.saved_tracks = tracks_hm;
                                     data.user_data.saved_tracks_vec = tracks.clone();
                                 }
-                                Context::Tracks {
+                                Ok(Context::Tracks {
                                     tracks,
                                     desc: "User's liked tracks".to_string(),
-                                }
+                                })
                             }
-                            u if u.starts_with("radio:") => Context::Tracks {
+                            u if u.starts_with("radio:") => Ok(Context::Tracks {
                                 tracks: self.radio_tracks(u["radio:".len()..].to_string()).await?,
                                 desc: tracks_id.kind.clone(),
-                            },
+                            }),
                             uri => anyhow::bail!("unsupported Tracks context: {uri}"),
                         },
-                        ContextId::Show(show_id) => self.show_context(show_id).await?,
+                        ContextId::Show(show_id) => self.show_context(show_id).await,
                     };
 
+                    state.data.write().caches.context_in_flight.remove(&uri);
+
+                    let ctx = context_result?;
                     state
                         .data
                         .write()

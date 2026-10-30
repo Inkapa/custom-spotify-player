@@ -1,5 +1,8 @@
 use std::io::{BufReader, BufWriter};
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::sync::LazyLock;
@@ -74,6 +77,7 @@ pub enum SearchCacheEntry {
 /// the application's in-memory caches
 pub struct MemoryCaches {
     pub context: ttl_cache::TtlCache<String, Context>,
+    pub context_in_flight: HashSet<String>,
     pub search: ttl_cache::TtlCache<String, SearchCacheEntry>,
     pub lyrics: ttl_cache::TtlCache<String, Option<Lyrics>>,
     pub genres: ttl_cache::TtlCache<String, Vec<String>>,
@@ -92,6 +96,7 @@ impl MemoryCaches {
     pub fn new() -> Self {
         Self {
             context: ttl_cache::TtlCache::new(64),
+            context_in_flight: HashSet::new(),
             search: ttl_cache::TtlCache::new(64),
             lyrics: ttl_cache::TtlCache::new(64),
             genres: ttl_cache::TtlCache::new(64),
